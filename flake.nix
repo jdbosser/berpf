@@ -32,8 +32,10 @@
 
             packages.default = pkgs.python310Packages.callPackage ./pack.nix {}; 
 
-            buildPythonPackage = (python: python.pkgs.callPackage ./pack.nix {}); 
-
         }
-    );
+    ) // {
+
+        buildPythonPackage = (python: python.pkgs.callPackage ./pack.nix {}); 
+
+    };
 }
