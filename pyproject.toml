@@ -3,7 +3,7 @@ requires = ["setuptools", "setuptools-scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "berpfpy"
+name = "berpf"
 description = "My package description"
 readme = "README.md"
 version = "0.0.1"
@@ -12,9 +12,6 @@ dependencies = [
     "scipy",
     "matplotlib",
 ]
-
-[project.scripts]
-my-script = "berpfpy.module:function"
 
 
 [tool.pytest.ini_options]

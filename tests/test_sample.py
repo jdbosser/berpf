@@ -1,4 +1,3 @@
-from berpfpy.module import add
 
 
 def inc(x):
@@ -8,5 +7,3 @@ def inc(x):
 def test_answer():
     assert inc(3) == 4
 
-def test_add():
-    assert add(4) == 5
