@@ -15,7 +15,7 @@
         let pkgs = nixpkgs.legacyPackages.${system}; 
         
         in
-        {
+        rec {
             devShells.default =  pkgs.mkShell {
                   buildInputs = [
                     (pkgs.python3.withPackages (p: [
@@ -24,10 +24,15 @@
                         p.setuptools
                         p.scipy 
                         p.tqdm
+                        packages.default
                     ]))
                     pkgs.pyright
                   ];
             };
+
+            packages.default = pkgs.python310Packages.callPackage ./pack.nix {}; 
+
+            buildPythonPackage = (python: python.pkgs.callPackage ./pack.nix {}); 
 
         }
     );
