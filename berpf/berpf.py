@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TypeVar, Protocol, Callable, Optional
+from typing import TypeVar, Protocol, Callable, Optional, runtime_checkable, Any
 import numpy as np
 
 State = TypeVar("State")
@@ -124,8 +124,8 @@ def _sysresample(weights:   np.ndarray,
 
 
 
-
-class BerParticleFilterSettings(Protocol):
+@runtime_checkable
+class BerParticleFilterSettingsProtocol(Protocol):
 
     
     rng:            np.random.Generator
@@ -135,9 +135,7 @@ class BerParticleFilterSettings(Protocol):
     prob_birth:     float
     prob_surv:      float
     
-    @property
-    def likelihood_fn(self) -> Callable[[Particles, Optional[Measurements]], tuple[np.ndarray, np.ndarray]]:
-        ...
+    likelihood_fn: Callable[[Particles, Optional[Measurements]], tuple[np.ndarray, np.ndarray]]
 
     @property
     def birth_model(self) -> Callable[[Optional[Measurements], int, np.random.Generator], Particles]:
@@ -149,18 +147,41 @@ class BerParticleFilterSettings(Protocol):
 
 
 @dataclass
+class BerParticleFilterSettings:
+
+    likelihood_fn : Callable[[Particles, Optional[Measurements]], tuple[np.ndarray, np.ndarray]]
+    birth_model: Callable[[Optional[Measurements], int, np.random.Generator], Particles]
+    motion_model: Callable[[Particles], Particles]
+    Nsuv:           int 
+    Nbirth:         int
+    prob_birth:     float
+    prob_surv:      float
+    
+    rng:            np.random.Generator = np.random.default_rng()
+
+
+Likelihood = Callable[[Particles, Optional[Measurements]], tuple[np.ndarray, np.ndarray]]
+BirthModel = Callable[[Optional[Measurements], int, np.random.Generator], Particles]
+MotionModel = Callable[[Particles], Particles]
+
+
+@dataclass
 class BerParticleFilter:
 
+    likelihood_fn : Likelihood
+    birth_model: BirthModel
+    motion_model: MotionModel
 
-
-
-    settings:   BerParticleFilterSettings
+    Nsuv:           int 
+    Nbirth:         int
+    prob_birth:     float
+    prob_surv:      float
 
     prob:       float
-                
-    particles_surv: np.ndarray  
-    weights_surv:   np.ndarray 
-
+                 
+    particles_surv: np.ndarray
+    weights_surv:   np.ndarray
+ 
     particles_born: np.ndarray
     weights_born:   np.ndarray
     N_eff:          float = np.nan
@@ -168,10 +189,13 @@ class BerParticleFilter:
     N_eff_surv_normalized: float = np.nan
     N_eff_born:     float = np.nan
     N_eff_born_normalized: float = np.nan
+    rng:            np.random.Generator = np.random.default_rng()
     
     
     @property
     def mean(self) -> np.ndarray:
+        
+        assert self.weights_born is not None and self.weights_born is not None 
 
         if len(self.weights_surv) > 0:
             return (self.weights_surv @ self.particles_surv)
@@ -188,7 +212,7 @@ class BerParticleFilter:
     def covar(self) -> np.ndarray:
         
         mean = self.mean
-        d = self.particles_surv - mean
+        d = np.subtract(self.particles_surv, mean)
         
         return np.einsum("i,id,ic->dc", self.weights_surv, d, d)
 
@@ -198,6 +222,66 @@ class BerParticleFilter:
         i = np.argmax(self.weights_surv)
         return self.particles_surv[i]
     
+    
+    def __init__(self, 
+                    Nsuv:           int ,
+                    Nbirth:         int,
+                    prob_birth:     float,
+                    prob_surv:      float,
+                    likelihood_fn : Likelihood,
+                    birth_model: BirthModel,
+                    motion_model: MotionModel,
+                    prob: float = 0, 
+                    particles_born: np.ndarray | None = None, 
+                    weights_born: np.ndarray | None = None,
+                    particles_surv: np.ndarray | None = None,
+                    weights_surv: np.ndarray | None = None, 
+                    N_eff : float = np.nan, 
+                    N_eff_surv : float = np.nan,
+                    N_eff_surv_normalized : float = np.nan, 
+                    N_eff_born: float = np.nan , 
+                    N_eff_born_normalized : float = np.nan,
+                    rng: np.random.Generator = np.random.default_rng(),
+                    ) -> None:
+
+        self.prob = prob
+
+        if particles_born is None: 
+            self.particles_born = birth_model(None, Nbirth, rng)
+        else: 
+            self.particles_born = particles_born
+        
+
+
+        if weights_born is None: 
+            self.weights_born = 1/Nbirth * np.ones(Nbirth)
+        else: 
+            self.weights_born = weights_born
+
+        if particles_surv is None:
+            self.particles_surv = np.empty((0, self.particles_born.shape[1]))
+        else: 
+            self.particles_surv = particles_surv
+
+        if weights_surv is None: 
+            self.weights_surv = np.empty(0)
+        else: 
+            self.weights_surv = weights_surv
+
+        self.Nsuv = Nsuv
+        self.Nbirth = Nbirth
+        self.prob_birth = prob_birth
+        self.prob_surv = prob_surv
+        self.likelihood_fn = likelihood_fn
+        self.birth_model = birth_model
+        self.motion_model = motion_model
+        self.N_eff = N_eff
+        self.N_eff_surv = N_eff_surv  
+        self.N_eff_surv_normalized = N_eff_surv_normalized  
+        self.N_eff_born = N_eff_born  
+        self.N_eff_born_normalized = N_eff_born_normalized  
+        self.rng = rng
+
 
     def __call__(self, measurements: Optional[np.ndarray]) -> 'BerParticleFilter':
 
@@ -206,14 +290,14 @@ class BerParticleFilter:
         w_b = self.weights_born
 
 
-        prob_surv   = self.settings.prob_surv
-        prob_birth  = self.settings.prob_birth
-        Nsuv        = self.settings.Nsuv
-        Nbirth      = self.settings.Nbirth
+        prob_surv   = self.prob_surv
+        prob_birth  = self.prob_birth
+        Nsuv        = self.Nsuv
+        Nbirth      = self.Nbirth
         
-        motion_model    = self.settings.motion_model
-        birth_model     = self.settings.birth_model 
-        likelihood_fn   = self.settings.likelihood_fn
+        motion_model    = self.motion_model
+        birth_model     = self.birth_model 
+        likelihood_fn   = self.likelihood_fn
     
 
         Ntot = Nsuv + Nbirth
@@ -263,19 +347,37 @@ class BerParticleFilter:
         )
 
 
-        indices_surv_particles = _sysresample(w, Nsuv, self.settings.rng)
+        indices_surv_particles = _sysresample(w, Nsuv, self.rng)
         particles_surv = particles_p[indices_surv_particles]
 
         # Reset the weights
         w_surv = np.ones(Nsuv)/Nsuv
 
         # Find some newborn particles
-        particles_born = birth_model(measurements, Nbirth, self.settings.rng)
+        particles_born = birth_model(measurements, Nbirth, self.rng)
 
         # Set the weights for the newborn particles
         w_born = np.ones(Nbirth)/Nbirth 
 
+        return self.override(
+                particles_born = particles_born, 
+                weights_born = w_born, 
+                particles_surv = particles_surv,
+                weights_surv = w_surv,
+                prob = q, 
+                N_eff = N_eff,
+                N_eff_surv = N_eff_surv,
+                N_eff_surv_normalized = N_eff_surv_normalized,
+                N_eff_born = N_eff_born,
+                N_eff_born_normalized = N_eff_born_normalized,
+        )
+        
+    def parameters(self) -> dict[str, Any]:
 
-        return BerParticleFilter(self.settings, q, particles_surv, w_surv, particles_born, w_born, 
-                                 N_eff, N_eff_surv, N_eff_surv_normalized, 
-                                 N_eff_born, N_eff_born_normalized)
+        return self.__dict__
+
+    def override(self, **kwargs) -> "BerParticleFilter":
+
+        new_args = dict(self.parameters(), **kwargs)
+        return BerParticleFilter(**new_args)
+

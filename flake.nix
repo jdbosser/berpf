@@ -18,13 +18,15 @@
         rec {
             devShells.default =  pkgs.mkShell {
                   buildInputs = [
-                    (pkgs.python3.withPackages (p: [
+                    (pkgs.python310.withPackages (p: [
                         p.numpy 
                         p.matplotlib 
                         p.setuptools
                         p.scipy 
                         p.tqdm
+                        p.mypy
                         packages.default
+                        p.pytest
                     ]))
                     pkgs.pyright
                   ];
