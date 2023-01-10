@@ -1,4 +1,4 @@
-{lib, buildPythonPackage, pytestCheckHook, numpy, pip, pythonOlder }:
+{lib, buildPythonPackage, pytestCheckHook, numpy, pip, setuptools, pythonOlder }:
 
 buildPythonPackage rec {
     pname = "berpf";
@@ -7,7 +7,7 @@ buildPythonPackage rec {
     src = ./.;
     format = "pyproject";
     checkInputs = [ pytestCheckHook ];
-    buildInputs = [pip]; 
+    buildInputs = [pip setuptools]; 
     propagatedBuildInputs  = [ numpy ];
     meta = with lib; {
     };
