@@ -1,1 +1,1 @@
-from .berpf import BerParticleFilterSettings, BerParticleFilter
+from .berpf import BerParticleFilterSettings, BerParticleFilter, Likelihood
